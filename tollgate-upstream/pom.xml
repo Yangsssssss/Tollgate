@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>io.tollgate</groupId>
+        <artifactId>tollgate-parent</artifactId>
+        <version>0.1.0-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>tollgate-upstream</artifactId>
+    <name>tollgate-upstream</name>
+    <description>上游适配器 SPI 与各厂商协议实现（OpenAI / Anthropic / ...）</description>
+
+    <dependencies>
+        <dependency>
+            <groupId>io.tollgate</groupId>
+            <artifactId>tollgate-common</artifactId>
+        </dependency>
+        <!-- WebClient 在这里只用于出站调用，不引入 Servlet 容器 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-webflux</artifactId>
+        </dependency>
+    </dependencies>
+</project>

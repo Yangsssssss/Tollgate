@@ -1,0 +1,62 @@
+server:
+  port: 8080
+  shutdown: graceful
+
+spring:
+  application:
+    name: tollgate
+  threads:
+    virtual:
+      enabled: true          # 控制面与落账的阻塞调用跑在虚拟线程上
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:tollgate}
+    username: ${DB_USER:tollgate}
+    password: ${DB_PASSWORD:tollgate}
+    hikari:
+      maximum-pool-size: 16
+      pool-name: tollgate-pool
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    locations: classpath:db/migration
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      timeout: 2s
+
+tollgate:
+  dispatch:
+    # 单次请求最多尝试的车道数（含首次），超出直接返回上游错误
+    max-attempts: 3
+    # 单车道单次调用超时
+    request-timeout: 120s
+    # 流式响应的首包超时
+    first-token-timeout: 30s
+  breaker:
+    # 滑动窗口内失败率达到阈值则打开熔断
+    failure-rate-threshold: 0.5
+    # 窗口最小样本数，样本不足不触发熔断
+    minimum-calls: 10
+    # 熔断打开后多久进入半开探测
+    open-duration: 30s
+    # 半开状态下允许放行的探测请求数
+    half-open-permits: 3
+  metering:
+    # 计量记录攒批写入的条数阈值
+    batch-size: 200
+    # 或达到该间隔强制刷盘
+    flush-interval: 2s
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: when-authorized
+
+logging:
+  level:
+    io.tollgate: INFO

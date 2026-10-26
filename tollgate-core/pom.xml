@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>io.tollgate</groupId>
+        <artifactId>tollgate-parent</artifactId>
+        <version>0.1.0-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>tollgate-core</artifactId>
+    <name>tollgate-core</name>
+    <description>调度内核：候选集筛选、限流、平滑加权轮询、熔断器、密钥池</description>
+
+    <dependencies>
+        <dependency>
+            <groupId>io.tollgate</groupId>
+            <artifactId>tollgate-common</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.tollgate</groupId>
+            <artifactId>tollgate-upstream</artifactId>
+        </dependency>
+        <!-- 限流计数与车道状态缓存；单机模式可退回纯内存实现 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis-reactive</artifactId>
+        </dependency>
+    </dependencies>
+</project>

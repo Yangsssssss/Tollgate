@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>io.tollgate</groupId>
+        <artifactId>tollgate-parent</artifactId>
+        <version>0.1.0-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>tollgate-metering</artifactId>
+    <name>tollgate-metering</name>
+    <description>用量采集、token 统计、异步批量落账</description>
+
+    <dependencies>
+        <dependency>
+            <groupId>io.tollgate</groupId>
+            <artifactId>tollgate-common</artifactId>
+        </dependency>
+        <!-- 落账走 JDBC + 虚拟线程，不占用数据面事件循环 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-jdbc</artifactId>
+        </dependency>
+    </dependencies>
+</project>
