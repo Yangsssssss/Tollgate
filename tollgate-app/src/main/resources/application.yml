@@ -40,9 +40,16 @@ tollgate:
     # 窗口最小样本数，样本不足不触发熔断
     minimum-calls: 10
     # 熔断打开后多久进入半开探测
-    open-duration: 30s
+    open-duration-seconds: 30
     # 半开状态下允许放行的探测请求数
     half-open-permits: 3
+    # 滑动窗口跨度（秒），同时作为分桶数（每桶 1 秒）
+    window-seconds: 10
+  keypool:
+    # 车道密钥连续失败 N 次后封禁（密钥失效是持续状态，连续失败是强信号）
+    ban-threshold: 3
+    # 封禁时长（秒），到期放一次真实调用验证
+    ban-duration-seconds: 60
   metering:
     # 计量记录攒批写入的条数阈值
     batch-size: 200

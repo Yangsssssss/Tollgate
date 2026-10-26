@@ -111,7 +111,10 @@ public class ChatCompletionsHandler {
                             TokenEstimator.estimateTotal(body), startMillis, rawBody);
                     return stream ? streamDispatch(ctx, 1) : completeDispatch(ctx, 1);
                 })
-                .onErrorResume(TollgateException.class, e -> reject(e.getErrorCode(), e.getMessage()));
+                .onErrorResume(TollgateException.class, e -> reject(e.getErrorCode(), e.getMessage()))
+                // 兜底：调度链之外跑出的任何异常（序列化、限流器内部错误等）
+                // 都不能以裸 500 HTML 形式泄漏给客户端
+                .onErrorResume(e -> reject(ErrorCode.INTERNAL_ERROR, "网关内部错误: " + e.getMessage()));
     }
 
     // ------------------------------------------------------------------
@@ -145,16 +148,21 @@ public class ChatCompletionsHandler {
                             .contentType(MediaType.APPLICATION_JSON)
                             .bodyValue(completionResponse(ctx, result, usage));
                 })
-                .onErrorResume(TollgateException.class, e -> {
+                // 必须接所有异常：DNS 解析失败、连接拒绝抛的是 WebClientRequestException，
+                // 若只接 TollgateException，这些失败会漏过 selection.fail()——
+                // 熔断器永远记不上连接类故障，且客户端收到裸 500 而非换道后的成功
+                .onErrorResume(e -> {
                     long latency = System.currentTimeMillis() - attemptStart;
                     selection.fail();
+                    TollgateException te = e instanceof TollgateException t ? t
+                            : TollgateException.retryable(ErrorCode.UPSTREAM_TIMEOUT, lane.code(), e);
                     logAttempt(ctx, lane.code(), attempt, "FAILED",
-                            upstreamStatus(e), e.getErrorCode().getCode(), latency, false);
-                    if (e.isRetryable() && attempt < MAX_ATTEMPTS) {
+                            upstreamStatus(te), te.getErrorCode().getCode(), latency, false);
+                    if (te.isRetryable() && attempt < MAX_ATTEMPTS) {
                         return completeDispatch(ctx, attempt + 1);
                     }
                     recordToll(ctx, lane.code(), attempt, TokenUsage.ZERO, latency, false);
-                    return reject(e.getErrorCode(), friendlyMessage(e, attempt));
+                    return reject(te.getErrorCode(), friendlyMessage(te, attempt));
                 });
     }
 

@@ -9,6 +9,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
@@ -28,10 +29,17 @@ public class CatalogLoader {
 
     private final JdbcTemplate jdbc;
     private final AtomicReference<CatalogSnapshot> snapshot = new AtomicReference<>();
+    /** 快照更新后的下游联动（如限流器阈值重建）；监听器抛异常不影响刷新本身 */
+    private final List<Runnable> refreshListeners = new CopyOnWriteArrayList<>();
 
     public CatalogLoader(JdbcTemplate jdbc) {
         this.jdbc = jdbc;
         refresh();
+    }
+
+    /** 注册快照刷新回调，刷新成功后同步执行 */
+    public void onRefresh(Runnable listener) {
+        refreshListeners.add(listener);
     }
 
     public CatalogSnapshot current() {
@@ -103,5 +111,14 @@ public class CatalogLoader {
 
         snapshot.set(new CatalogSnapshot(
                 Map.copyOf(lanes), Map.copyOf(routes), credentials, Map.copyOf(laneSecrets)));
+
+        // 监听器异常只留痕，不能把已成功的刷新判成失败
+        for (Runnable listener : refreshListeners) {
+            try {
+                listener.run();
+            } catch (Exception e) {
+                System.err.println("[catalog] 刷新回调失败: " + e.getMessage());
+            }
+        }
     }
 }

@@ -40,13 +40,35 @@ public class DispatchRuntime {
     /** 每租户独立限流器（桶状态按租户隔离）；配置刷新时整体重建，桶计数清零 */
     private volatile Map<Long, TenantRateLimiter> rateLimiters = Map.of();
 
-    public DispatchRuntime(CatalogLoader catalog) {
+    public DispatchRuntime(CatalogLoader catalog,
+                           @org.springframework.beans.factory.annotation.Value(
+                                   "${tollgate.breaker.failure-rate-threshold:0.5}") double breakerFailureRate,
+                           @org.springframework.beans.factory.annotation.Value(
+                                   "${tollgate.breaker.minimum-calls:10}") int breakerMinCalls,
+                           @org.springframework.beans.factory.annotation.Value(
+                                   "${tollgate.breaker.open-duration-seconds:30}") long breakerOpenSeconds,
+                           @org.springframework.beans.factory.annotation.Value(
+                                   "${tollgate.breaker.half-open-permits:3}") int breakerHalfOpenPermits,
+                           @org.springframework.beans.factory.annotation.Value(
+                                   "${tollgate.breaker.window-seconds:10}") long breakerWindowSeconds,
+                           @org.springframework.beans.factory.annotation.Value(
+                                   "${tollgate.keypool.ban-threshold:3}") int keyBanThreshold,
+                           @org.springframework.beans.factory.annotation.Value(
+                                   "${tollgate.keypool.ban-duration-seconds:60}") long keyBanSeconds) {
         this.catalog = catalog;
         this.resolver = new CandidateResolver(this::lanesForModel, lane -> false);
         this.selector = new LaneSelector(resolver, this::keyPoolFor,
-                null, CircuitBreakerConfig.defaults(),
-                KeyPoolConfig.defaults(), System::currentTimeMillis);
+                null, new CircuitBreakerConfig(breakerFailureRate, breakerMinCalls,
+                        java.time.Duration.ofSeconds(breakerOpenSeconds), breakerHalfOpenPermits,
+                        java.time.Duration.ofSeconds(breakerWindowSeconds),
+                        Math.max(1, (int) breakerWindowSeconds)),
+                new KeyPoolConfig(keyBanThreshold,
+                        java.time.Duration.ofSeconds(keyBanSeconds)),
+                System::currentTimeMillis);
         this.rebuildRateLimiters();
+        // 关键接线：限流阈值来自快照里的租户额度，快照变了必须重建，
+        // 否则控制面改 rpm/tpm 后永远不生效（429 验收暴露的缺陷）
+        catalog.onRefresh(this::rebuildRateLimiters);
     }
 
     /** 由配置目录实时构建某模型的候选车道，权重应用 model_lane 覆盖 */
