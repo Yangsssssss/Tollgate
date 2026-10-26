@@ -176,7 +176,7 @@ New API（31K+ star）、LiteLLM（40K+ star）已经覆盖了网关类项目 90
 
 ## 技术栈
 
-Java 21 · Spring Boot 3.5 · WebFlux (Reactor Netty) · PostgreSQL · Flyway · Redis
+Java 21 · Spring Boot 3.5 · WebFlux (Reactor Netty) · MySQL 8 · Flyway · Redis
 
 热路径全异步非阻塞；控制面与落账走 JDBC + 虚拟线程，不为了"纯响应式"牺牲可维护性。
 
