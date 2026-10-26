@@ -2,11 +2,21 @@
 
 > 大模型收费站 —— 统一的 API 闸口，按渠道分流，按 token 计量。
 
-一个用 Java 21 + WebFlux 实现的大模型 API 网关：对外暴露 OpenAI 兼容协议，对内完成渠道调度、熔断降级与 token 计量。
+一个用 Java 21 + WebFlux 实现的大模型 API 网关：对外暴露 OpenAI 兼容协议，对内完成渠道调度、熔断降级与 token 计量。**V1.3 调度闭环已完成并通过真实验收**（38 单测全绿）。
 
 它要回答的不是"能不能转发"，而是三个在响应式链路上特别难处理的问题：
 
 **流式响应怎么边转发边计量、上游挂掉怎么在毫秒级切换、多实例下调度状态怎么保持一致。**
+
+## 文档索引
+
+| 文档 | 内容 |
+|---|---|
+| [docs/architecture.md](docs/architecture.md) | 架构设计：两平面分离、快照机制、请求生命周期、代码导读 |
+| [docs/api.md](docs/api.md) | API 参考：数据面协议、控制面 /admin 全端点、错误码表 |
+| [docs/database.md](docs/database.md) | 数据模型：9 张表、幂等落账、密钥安全现状 |
+| [docs/design-decisions.md](docs/design-decisions.md) | 关键设计取舍 + 14 个真实踩坑实录（最值得读） |
+| [docs/operations.md](docs/operations.md) | 运行手册：启动、配置、验证清单、接真实上游 |
 
 ## 核心设计
 
@@ -73,13 +83,14 @@
 ## 一次请求的调度链
 
 ```
-1. Gate        解析虚拟密钥 → 定位租户 → 额度与状态校验
-2. Candidate   模型别名展开 → 剔除禁用/无密钥/熔断中的车道
-3. RateLimit   租户 RPM/TPM 与车道并发预检，超限快速失败
-4. Dispatch    优先级分层 → 层内平滑加权轮询 → 选出本次车道与密钥
-5. Forward     构造上游请求 → SSE 流式透传 → 旁路嗅探 usage
-6. Failover    超时/5xx/429 → 同层换道重试 → 驱动熔断器状态机
-7. Toll        组装计量记录 → 入队 → 批量落库
+1. Gate        解析虚拟密钥 → 定位租户（SHA-256 查快照，明文不落库）
+2. RateLimit   租户 RPM/TPM 双维度令牌桶，超限快速失败（429）
+3. Candidate   模型别名展开 → 优先级分层 → 层内平滑加权轮询选车道
+4. KeyPool     车道内密钥轮换，被禁密钥跳过（先密钥后熔断，防半开配额泄漏）
+5. Breaker     熔断门控 tryAcquire，拒绝则换下一车道；全灭 → 503
+6. Forward     构造上游请求 → SSE 流式透传 → 旁路嗅探 usage
+7. Failover    超时/5xx/429 → 换道重试 → 驱动熔断器状态机（最多 max-attempts）
+8. Toll        组装计量记录 → 攒批落库（幂等键 trace_id + attempt）
 ```
 
 熔断器状态机：`CLOSED →(失败率超阈)→ OPEN →(冷却)→ HALF_OPEN →(探测成功)→ CLOSED`
@@ -152,9 +163,10 @@ New API（31K+ star）、LiteLLM（40K+ star）已经覆盖了网关类项目 90
 | `lane_key` | 车道下的上游密钥池 |
 | `model` | 模型定义、别名、上下文长度 |
 | `model_lane` | 模型 × 车道 可用映射，支持该组合下的权重覆盖 |
-| `tariff` | 费率表：输入/输出单价（V2） |
 | `request_log` | 调用明细：链路 ID、耗时、状态、车道、重试次数 |
 | `toll_record` | 计量明细：prompt/completion token、成本 |
+
+详见 [docs/database.md](docs/database.md)。
 
 ## 路线图
 
@@ -163,11 +175,11 @@ New API（31K+ star）、LiteLLM（40K+ star）已经覆盖了网关类项目 90
 | 阶段 | 内容 | 状态 |
 |---|---|---|
 | V1.0 | 多模块骨架、术语体系、架构文档 | ✅ |
-| V1.1 | 数据模型 + Flyway 迁移 + 种子数据 | |
-| V1.2 | 调度内核：候选集、平滑加权轮询、熔断器、密钥池（纯单元测试，不依赖容器） | |
-| V1.3 | 转发闭环：WebFlux + SSE 透传 + 故障转移 + 计量落账 | |
-| V1.4 | 可演示：Mock 上游 + `docker compose up` 一键启动 | |
-| V1.5 | 压测报告与故障转移演示脚本 | |
+| V1.1 | 数据模型 + Flyway 迁移 + 种子数据（MySQL 方言） | ✅ |
+| V1.2 | 调度内核：候选集、平滑加权轮询、熔断器、密钥池（38 单测，不依赖容器） | ✅ |
+| V1.3 | 转发闭环：WebFlux + SSE 透传 + 故障转移 + 计量落账 + 控制面 API | ✅ |
+| V1.4 | 可演示：压测报告与故障转移演示脚本 | |
+| V1.5 | Redis 分布式限流（多实例一致性） | |
 
 **暂不实现，但保留模块边界**：
 
@@ -182,7 +194,24 @@ Java 21 · Spring Boot 3.5 · WebFlux (Reactor Netty) · MySQL 8 · Flyway · Re
 
 ## 快速开始
 
-> V1.3 闭环打通后补充。
+```bash
+# 1. 准备 MySQL（Flyway 启动时自动建表+灌演示数据），然后构建
+./mvnw clean package
+
+# 2. 启动网关
+java -jar tollgate-app/target/tollgate-app-*.jar --server.port=18080
+
+# 3. 启动本地 mock 上游（9999 端口，流式/非流式/usage 帧）
+python3 scripts/mock_openai_upstream.py &
+
+# 4. 发一个请求（演示租户密钥）
+curl -s http://localhost:18080/v1/chat/completions \
+  -H "Authorization: Bearer tg-demo0000000000" \
+  -H "Content-Type: application/json" \
+  -d '{"model":"gpt-4o-mini","messages":[{"role":"user","content":"你好"}]}'
+```
+
+完整配置项、验证清单（429 / 熔断三态 / 换道重试）见 [docs/operations.md](docs/operations.md)。
 
 ## License
 
