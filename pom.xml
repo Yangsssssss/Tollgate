@@ -24,6 +24,7 @@
         <module>tollgate-upstream</module>
         <module>tollgate-core</module>
         <module>tollgate-metering</module>
+        <module>tollgate-console</module>
         <module>tollgate-app</module>
     </modules>
 
@@ -55,6 +56,11 @@
             <dependency>
                 <groupId>io.tollgate</groupId>
                 <artifactId>tollgate-metering</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.tollgate</groupId>
+                <artifactId>tollgate-console</artifactId>
                 <version>${project.version}</version>
             </dependency>
         </dependencies>

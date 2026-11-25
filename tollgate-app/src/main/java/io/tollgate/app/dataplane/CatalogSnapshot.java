@@ -1,5 +1,7 @@
 package io.tollgate.app.dataplane;
 
+import io.tollgate.metering.TariffRate;
+
 import java.util.List;
 import java.util.Map;
 
@@ -14,12 +16,14 @@ import java.util.Map;
  * @param routes       模型别名 → 该模型可走的路由（车道 + 上游模型名）
  * @param credentials  密钥 SHA-256 → 凭据（含租户与限流额度）
  * @param laneSecrets  车道 → 上游密钥明文列表（仅存内存，不落日志）
+ * @param tariffs      模型别名 → 费率（计费按快照时点价格，调价不回溯）
  */
 public record CatalogSnapshot(
         Map<Long, CatalogLane> lanes,
         Map<String, List<ModelRoute>> routes,
         Map<String, ApiKeyCredential> credentials,
-        Map<Long, List<String>> laneSecrets
+        Map<Long, List<String>> laneSecrets,
+        Map<String, TariffRate> tariffs
 ) {
 
     /** 车道配置的只读投影，字段与 lane 表一一对应 */

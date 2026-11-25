@@ -23,6 +23,11 @@
             <groupId>io.tollgate</groupId>
             <artifactId>tollgate-metering</artifactId>
         </dependency>
+        <!-- 控制台 API 与数据面同进程部署：主类 scanBasePackages=io.tollgate 自动装配 -->
+        <dependency>
+            <groupId>io.tollgate</groupId>
+            <artifactId>tollgate-console</artifactId>
+        </dependency>
 
         <dependency>
             <groupId>org.springframework.boot</groupId>

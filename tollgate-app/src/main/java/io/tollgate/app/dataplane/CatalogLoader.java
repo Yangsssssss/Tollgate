@@ -1,5 +1,6 @@
 package io.tollgate.app.dataplane;
 
+import io.tollgate.metering.TariffRate;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -109,8 +110,18 @@ public class CatalogLoader {
                     .add(rs.getString("secret"));
         });
 
+        Map<String, TariffRate> tariffs = new HashMap<>();
+        jdbc.query("""
+                SELECT model_alias, prompt_micros_per_1k, completion_micros_per_1k
+                FROM tariff WHERE status = 'ENABLED'
+                """, rs -> {
+            tariffs.put(rs.getString("model_alias"), new TariffRate(
+                    rs.getLong("prompt_micros_per_1k"), rs.getLong("completion_micros_per_1k")));
+        });
+
         snapshot.set(new CatalogSnapshot(
-                Map.copyOf(lanes), Map.copyOf(routes), credentials, Map.copyOf(laneSecrets)));
+                Map.copyOf(lanes), Map.copyOf(routes), credentials, Map.copyOf(laneSecrets),
+                Map.copyOf(tariffs)));
 
         // 监听器异常只留痕，不能把已成功的刷新判成失败
         for (Runnable listener : refreshListeners) {

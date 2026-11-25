@@ -102,7 +102,7 @@ public class BatchingTollRecorder implements TollRecorder {
                 INSERT INTO toll_record (trace_id, attempt, tenant_id, model_alias, lane_code,
                         prompt_tokens, completion_tokens, estimated, cost_micros,
                         latency_millis, success, occurred_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON DUPLICATE KEY UPDATE id = id
                 """, batch, batch.size(), (ps, toll) -> {
             TokenUsage usage = toll.usage();
@@ -114,9 +114,10 @@ public class BatchingTollRecorder implements TollRecorder {
             ps.setInt(6, usage.promptTokens());
             ps.setInt(7, usage.completionTokens());
             ps.setBoolean(8, usage.estimated());
-            ps.setLong(9, toll.latencyMillis());
-            ps.setBoolean(10, toll.success());
-            ps.setTimestamp(11, Timestamp.from(toll.occurredAt()));
+            ps.setLong(9, toll.costMicros());
+            ps.setLong(10, toll.latencyMillis());
+            ps.setBoolean(11, toll.success());
+            ps.setTimestamp(12, Timestamp.from(toll.occurredAt()));
         });
     }
 

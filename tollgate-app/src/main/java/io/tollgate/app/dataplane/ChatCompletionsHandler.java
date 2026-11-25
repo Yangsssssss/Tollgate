@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.tollgate.app.dataplane.CatalogSnapshot.ApiKeyCredential;
 import io.tollgate.app.metering.BatchingTollRecorder;
+import io.tollgate.metering.BillingService;
 import io.tollgate.common.error.ErrorCode;
 import io.tollgate.common.error.TollgateException;
 import io.tollgate.common.model.TokenUsage;
@@ -58,13 +59,16 @@ public class ChatCompletionsHandler {
 
     private final DispatchRuntime runtime;
     private final BatchingTollRecorder recorder;
+    private final BillingService billing;
     private final Map<String, UpstreamAdapter> adapters;
     private final ObjectMapper mapper;
 
     public ChatCompletionsHandler(DispatchRuntime runtime, BatchingTollRecorder recorder,
+                                  BillingService billing,
                                   List<UpstreamAdapter> adapters, ObjectMapper mapper) {
         this.runtime = runtime;
         this.recorder = recorder;
+        this.billing = billing;
         this.mapper = mapper;
         this.adapters = adapters.stream()
                 .collect(Collectors.toMap(UpstreamAdapter::providerCode, a -> a));
@@ -106,6 +110,14 @@ public class ChatCompletionsHandler {
                     }
                     if (!runtime.hasRoutes(model)) {
                         return reject(ErrorCode.MODEL_NOT_FOUND, "模型不存在或无可用车道: " + model);
+                    }
+                    // 预付费预检：余额不足以覆盖估算成本时直接 402，不消耗上游配额。
+                    // 估算偏保守（prompt + 满额 completion），宁可多估不放过量
+                    long estPrompt = TokenEstimator.estimatePrompt(body);
+                    long estCompletion = Math.max(1, TokenEstimator.estimateTotal(body) - estPrompt);
+                    if (!billing.precheck(cred.tenantId(),
+                            billing.estimateCost(model, estPrompt, estCompletion))) {
+                        return reject(ErrorCode.QUOTA_EXHAUSTED, "余额不足，请充值后重试");
                     }
                     var ctx = new DispatchContext(traceId, cred, model, body, stream,
                             TokenEstimator.estimateTotal(body), startMillis, rawBody);
@@ -345,9 +357,14 @@ public class ChatCompletionsHandler {
 
     private void recordToll(DispatchContext ctx, String laneCode, int attempt,
                             TokenUsage usage, long latencyMillis, boolean success) {
+        // 实扣只在成功调用上发生：失败的 attempt 不计费（usage 为 ZERO，成本 0）
+        long cost = success
+                ? billing.settle(ctx.cred().tenantId(), ctx.traceId(), ctx.model(),
+                        usage.promptTokens(), usage.completionTokens())
+                : 0;
         recorder.record(new TollRecord(
                 ctx.traceId(), ctx.cred().tenantId(), ctx.model(), laneCode,
-                usage, 0L, latencyMillis, attempt - 1, success, Instant.now()));
+                usage, cost, latencyMillis, attempt - 1, success, Instant.now()));
     }
 
     private void logAttempt(DispatchContext ctx, String laneCode, int attempt, String status,
